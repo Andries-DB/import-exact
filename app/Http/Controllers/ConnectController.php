@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\PostAccounts;
+use App\Jobs\PostBookings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use SimpleXMLElement;
@@ -281,39 +283,11 @@ class ConnectController extends Controller
     public function postAccount($access_token) {
         $division = env('DIVISION');
         $allAccounts = DB::table('aaa_exact_contacten')->get();
-
         foreach($allAccounts as $account) {
-            $postData = [
-                "Code" => $account->klantcode,
-                "Name" => $account->naam,
-                "AddressLine1" => $account->straat,
-                "Postcode" => $account->postcode,
-                "City" => $account->gemeente,
-                "VATNumber" => $account->btwnummer,
-            ];
-
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, env('EXACT_API_URL') . '/api/v1/' . $division . '/crm/Accounts');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $access_token,
-                'Accept: application/json',
-                'Content-Type: application/json',
-            ]);
-
-            $response = curl_exec($ch);
-
-            if (curl_errno($ch)) {
-                echo 'cURL-fout: ' . curl_error($ch);
-            }
-
-            curl_close($ch);
-            $decodedResponse = json_decode($response);
+            PostAccounts::dispatch($account, $division, $access_token);
         }
        
-        return $decodedResponse;
+        //return $decodedResponse;
     }
 
     public function postBooking($access_token) {
@@ -321,50 +295,12 @@ class ConnectController extends Controller
     
         $blocks = $this->getBlockData($access_token);
         foreach($blocks as $booking) {
-            $salesEntryLines = [];
-
-            foreach($booking->lines as $line) {
-                $amount = floatval($line->bedrag);
-                $salesEntryLines[] = [
-                    "AmountFC" => $amount,
-                    "GLAccount" => $this->getGUIDGLAccount($access_token, $line->grootboekrekening),
-                    'VATCode' => $line->btwcode ? $line->btwcode : '0',
-                ];
-            }
-            $amount = floatval($line->bedrag);
-            // $booking->datum is a unix timestamp, we need to convert it to a date
-            $datum = date('Y-m-d', $booking->datum);
-            $postData = [
-                "Customer" => $this->getGUIDCustomer($access_token, $booking->klantcode),
-                "Journal" => '700',
-                "EntryDate" => $datum,
-                "Description" => $booking->omschrijving,
-                "SalesEntryLines" => $salesEntryLines,
-                "AmountFC" => $amount
-            ];
-
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, env('EXACT_API_URL') . '/api/v1/' . $division . '/salesentry/SalesEntries');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $access_token,
-                'Accept: application/json',
-                'Content-Type: application/json',
-            ]);
-
-            $response = curl_exec($ch);
-
-            if (curl_errno($ch)) {
-                echo 'cURL-fout: ' . curl_error($ch);
-            }
-
-            curl_close($ch);
-            $decodedResponse = json_decode($response);
+            
+            PostBookings::dispatch($booking, $division, $access_token);
+            
         }
 
-        return $decodedResponse;
+        //return $decodedResponse;
 
     }        
 
